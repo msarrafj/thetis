@@ -136,8 +136,10 @@ class HorizontalAdvectionTerm(TracerTerm):
             return 0
         elev = fields_old['elev_2d']
         self.corr_factor = fields_old.get('tracer_advective_velocity_factor')
-
         uv = self.corr_factor * fields_old['uv_2d']
+
+        conservative = self.options.use_tracer_conservative_form
+
         uv_p1 = fields_old.get('uv_p1')
         uv_mag = fields_old.get('uv_mag')
         # FIXME is this an option?
