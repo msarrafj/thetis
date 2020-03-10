@@ -315,20 +315,12 @@ class SourceTerm(TracerTerm):
         f = 0
 
         if self.options.use_tracer_conservative_form:
-            
+
             depth_int_source = fields_old.get('depth_integrated_source')
-            ero = fields_old.get('erosion')
-            depo = fields_old.get('deposition')
-            #H = self.get_total_depth(fields["elev_2d"])
-            
             if depth_int_source is not None:       
                 f += -inner(depth_int_source, self.test) * self.dx
-            elif ero or depo is not None:
-                f += -inner(-depo*solution + ero, self.test) * self.dx
             else:
                 print("Warning no source term")
-
-            
         else:
             source = fields_old.get('source')
             if source is not None:            
@@ -336,6 +328,38 @@ class SourceTerm(TracerTerm):
                 
         return -f
 
+
+
+class SinkTerm(TracerTerm):
+    r"""
+    Linear Sink term
+    
+    The weak form reads
+    
+    .. math::
+        F_s = \int_\Omega \sigma solution \phi dx
+
+    where :math:`\sigma` is a user defined scalar :class:`Function`.    
+
+
+    """
+    def residual(self, solution, solution_old, fields, fields_old, bnd_conditions=None):
+        
+        f = 0
+        
+        if self.options.use_tracer_conservative_form:
+
+            depth_int_sink = fields_old.get('depth_integrated_sink')
+            if depth_int_sink is not None:       
+                f += -inner(-depth_int_sink*solution, self.test) * self.dx
+            else:
+                print("Warning no sink term")
+        else:
+            sink = fields_old.get('sink')
+            if sink is not None:            
+                f += -inner(-sink*solution, self.test)*self.dx
+                
+        return -f    
 
 class MassTerm(TracerTerm):
     r"""
@@ -383,7 +407,9 @@ class TracerEquation2D(Equation):
         args = (function_space, bathymetry, options, sipg_parameter)
         self.add_term(HorizontalAdvectionTerm(*args), 'explicit')
         self.add_term(HorizontalDiffusionTerm(*args), 'explicit')
+        
         self.add_term(SourceTerm(*args), 'source')
+        self.add_term(SinkTerm(*args), 'sink')
         self._mass_term = MassTerm(*args)
 
     def mass_term(self, solution, fields):
