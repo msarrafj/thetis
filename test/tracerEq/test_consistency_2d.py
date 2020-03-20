@@ -43,11 +43,15 @@ def run_tracer_consistency(constant_c = True, **model_options):
     t_end = 2.5*t_cycle
 
     # create solver
+    
+    # Warning!!: All these options are overwritten by any options provided in the 
+    # input variables under model_options
+    
     solver_obj = solver2d.FlowSolver2d(mesh2d, bathymetry_2d)
     options = solver_obj.options
+    options.use_limiter_for_tracers = not constant_c
     options.use_nonlinear_equations = True
     options.solve_tracer = True
-    options.use_limiter_for_tracers = not constant_c
     options.simulation_export_time = t_export
     options.simulation_end_time = t_end
     options.horizontal_velocity_scale = Constant(u_mag)
@@ -84,13 +88,14 @@ def run_tracer_consistency(constant_c = True, **model_options):
     vol2d, vol2d_rerr = solver_obj.callbacks['export']['volume2d']()
     assert vol2d_rerr < 1e-10, '2D volume is not conserved'
     if options.solve_tracer:
-        tracer_int, tracer_int_rerr = solver_obj.callbacks['export']['tracer_2d mass']()
-        assert abs(tracer_int_rerr) < 1e-4, 'tracer is not conserved'
+        tracer_int, tracer_int_rerr = solver_obj.callbacks['timestep']['tracer_2d mass']()
+        assert abs(tracer_int_rerr) < 1.2e-4, 'tracer is not conserved'        
         smin, smax, undershoot, overshoot = solver_obj.callbacks['export']['tracer_2d overshoot']()
         max_abs_overshoot = max(abs(undershoot), abs(overshoot))
         overshoot_tol = 1e-12
-        msg = 'Tracer overshoots are too large: {:}'.format(max_abs_overshoot)
-        assert max_abs_overshoot < overshoot_tol, msg
+        if options.use_tracer_conservative_form == False:
+            msg = 'Tracer overshoots are too large: {:}'.format(max_abs_overshoot)
+            assert max_abs_overshoot < overshoot_tol, msg
 
 
 def test_const_tracer():
@@ -114,21 +119,19 @@ def test_nonconst_tracer():
                            use_nonlinear_equations=True,
                            solve_tracer=True,
                            use_limiter_for_tracers=True,
-                           no_exports=True)
-
+                           no_exports=False)   
 
 def test_nonconst_tracer_conservative():
     """
-    Test CrankNicolson timeintegrator  with slope limiters
+    Test CrankNicolson timeintegrator with no slope limiters
     Non-trivial tracer, should see no overshoots and be conserved
     """
-    run_tracer_consistency(constant_c= True,
+    run_tracer_consistency(constant_c= False,
                            use_nonlinear_equations=True,
                            solve_tracer=True,
                            use_limiter_for_tracers=False,
-                           no_exports=True,
+                           no_exports=False,
                            use_tracer_conservative_form=True)
-
 
 if __name__ == '__main__':
     run_tracer_consistency(constant_c= False,
