@@ -299,60 +299,64 @@ def comp_volume_3d(mesh):
     return val
 
 
-def comp_tracer_mass_2d(eta, bath, scalar_func):
+def comp_tracer_mass_2d(var, tracer_name):
     """
     Computes total tracer mass in the 2D domain
-    :arg eta: elevation :class:`Function`
-    :arg bath: bathymetry :class:`Function`
-    :arg scalar_func: scalar :class:`Function` to integrate
+    :arg var: class:`DiagnosticCallback`; callback object used to input values and
+                                          record output values
+    :arg tracer_name :class:`string` of function name of interest
     """
 
-    val = assemble((eta+bath)*scalar_func*dx)
+    # read in necessary variables from solver object
+    eta = var.solver_obj.fields.elev_2d.copy(deepcopy=True)
+    vel = var.solver_obj.fields.uv_2d.copy(deepcopy=True)
+    ero = var.solver_obj.options.tracer_depth_integ_source
+    depo = var.solver_obj.options.tracer_depth_integ_sink
 
-    return val
+    scalar_func = var.solver_obj.fields[tracer_name].copy(deepcopy=True)
 
-def comp_tracer_bed_mass_2d(var, tracer_name):
-    eta = var.solver_obj.fields.elev_2d.copy(deepcopy = True)
-    vel = var.solver_obj.fields.uv_2d.copy(deepcopy = True)
+    # calculate total depth
+    term = var.solver_obj.eq_tracer.terms['HorizontalAdvectionTerm']
+    H = term.get_total_depth(eta)
 
-    ero = var.solver_obj.options.tracer_depth_integ_source_erosion#.copy(deepcopy = True)
-    depo = var.solver_obj.options.tracer_depth_integ_source_deposition#.copy(deepcopy = True)
-
-    #initial_bath = var.initial_bath
-    scalar_func = var.solver_obj.fields[tracer_name].copy(deepcopy = True)
-    """
-    Computes total tracer mass in the 2D domain
-    :arg eta: elevation :class:`Function`
-    :arg bath: bathymetry :class:`Function`
-    :arg scalar_func: scalar :class:`Function` to integrate
-    """
+    # normal
     n = FacetNormal(var.solver_obj.mesh2d)
 
+    # calculate contribution from tracer leaving boundary
     boundary_terms = 0
-    term = var.solver_obj.eq_tracer.terms['HorizontalAdvectionTerm']
 
-    H = Function(eta.function_space()).interpolate(term.get_total_depth(eta)).copy(deepcopy = True)
-        
     for bnd_marker in term.boundary_markers:
         ds_bnd = ds(int(bnd_marker), degree=term.quad_degree)
         a = -(n[0]*vel[0] + n[1]*vel[1])*H*scalar_func*ds_bnd
 
         boundary_terms += assemble(a)
 
-
-    if var.initial_value is None:
-        var.initial_value = assemble(H*scalar_func*dx) 
+    # record the initial scalar value in the domain
+    if var.update_value is None:
+        var.initial_value = assemble(H*scalar_func*dx)
+        var.update_value = assemble(H*scalar_func*dx)
     else:
+        # alter the initial value to record tracer transitioning through source term
+        # and boundary terms
+        var.update_value += var.solver_obj.options.timestep * boundary_terms
 
         if var.solver_obj.options.use_tracer_conservative_form:
-            var.initial_value += var.solver_obj.options.simulation_export_time*(boundary_terms + assemble((-depo*scalar_func+ero)*dx))
+            if ero is not None:
+                var.update_value += var.solver_obj.options.timestep * assemble(ero*dx)
+            if depo is not None:
+                var.update_value += var.solver_obj.options.timestep * assemble(-depo*scalar_func*dx)
         else:
-            var.initial_value += var.solver_obj.options.simulation_export_time*(boundary_terms + assemble(var.solver_obj.options.tracer_source_2d*H*dx))
+            if var.solver_obj.options.tracer_source_2d is not None:
+                var.update_value += var.solver_obj.options.timestep * \
+                    assemble(var.solver_obj.options.tracer_source_2d*H*dx)
 
+    # find the current scalar value in the domain
     val = assemble(H*scalar_func*dx)
-    print(var.initial_value)
-    print(val)
 
+    # initialise to first non-zero value to avoid division by 0
+    if var.initial_value < 10**(-14):
+        if var.update_value > 10**(-14):
+            var.initial_value = var.update_value
     return val
 
 
