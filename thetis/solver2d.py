@@ -337,6 +337,36 @@ class FlowSolver2d(FrozenClass):
             filehandler.setFormatter(logging.logging.Formatter('%(message)s'))
             output_logger.addHandler(filehandler)
 
+        # HACK add elev/bath p0 mix/max fields
+        self.elev_max_2d = Function(self.function_spaces.P0_2d, name='elev_elem_max')
+        self.bathymetry_min_2d = Function(self.function_spaces.P0_2d, name='bath_elem_min')
+
+        domain = "{[i]: 0 <= i < f.dofs}"
+        instructions = """
+        for i
+            out[0] = fmin(out[0], f[i])
+        end
+        """
+        self._min_loop = (domain, instructions)
+        instructions = """
+        for i
+            out[0] = fmax(out[0], f[i])
+        end
+        """
+        self._max_loop = (domain, instructions)
+
+        self.bathymetry_min_2d.assign(1e30)
+        par_loop(self._min_loop,
+                 dx,
+                 {"out": (self.bathymetry_min_2d, RW),
+                  "f": (self.fields.bathymetry_2d, READ)},
+                 is_loopy_kernel=True)
+        #print((self.fields.bathymetry_2d.dat.data.min(), self.fields.bathymetry_2d.dat.data.max()))
+        #print((self.bathymetry_min_2d.dat.data.min(), self.bathymetry_min_2d.dat.data.max()))
+
+        #File('bath_min.pvd').write(self.bathymetry_min_2d)
+        #exit(0)
+
         # ----- Time integrators
         fields = {
             'linear_drag_coefficient': self.options.linear_drag_coefficient,
@@ -348,7 +378,10 @@ class FlowSolver2d(FrozenClass):
             'wind_stress': self.options.wind_stress,
             'atmospheric_pressure': self.options.atmospheric_pressure,
             'momentum_source': self.options.momentum_source_2d,
-            'volume_source': self.options.volume_source_2d, }
+            'volume_source': self.options.volume_source_2d,
+            'elev_max': self.elev_max_2d,
+            'bath_min': self.bathymetry_min_2d,
+        }
         self.set_time_step()
         if self.options.timestepper_type == 'SSPRK33':
             self.timestepper = rungekutta.SSPRK33(self.eq_sw, self.fields.solution_2d,
@@ -662,9 +695,23 @@ class FlowSolver2d(FrozenClass):
         initial_simulation_time = self.simulation_time
         internal_iteration = 0
 
+        self.elev_max_2d.assign(-1e30)
+        par_loop(self._max_loop,
+                 dx,
+                 {"out": (self.elev_max_2d, RW),
+                  "f": (self.fields.elev_2d, READ)},
+                 is_loopy_kernel=True)
+
         while self.simulation_time <= self.options.simulation_end_time - t_epsilon:
 
             self.timestepper.advance(self.simulation_time, update_forcings)
+
+            self.elev_max_2d.assign(-1e30)
+            par_loop(self._max_loop,
+                     dx,
+                     {"out": (self.elev_max_2d, RW),
+                     "f": (self.fields.elev_2d, READ)},
+                     is_loopy_kernel=True)
 
             # Move to next time step
             self.iteration += 1
@@ -685,3 +732,5 @@ class FlowSolver2d(FrozenClass):
                 self.export()
                 if export_func is not None:
                     export_func()
+
+                #print((self.elev_max_2d.dat.data.min(), self.elev_max_2d.dat.data.max()))
