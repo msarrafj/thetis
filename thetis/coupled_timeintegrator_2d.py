@@ -91,8 +91,12 @@ class CoupledTimeIntegrator2D(timeintegrator.TimeIntegratorBase):
                                                                   solver_parameters=self.options.timestepper_options.solver_parameters_tracer,
                                                                   semi_implicit=self.options.timestepper_options.use_semi_implicit_linearization,
                                                                   theta=self.options.timestepper_options.implicitness_theta)
+            elif issubclass(self.tracer_integrator, timeintegrator.SteadyState):
+                self.timesteppers.tracer = self.tracer_integrator(solver.eq_tracer, solver.fields.tracer_2d,
+                                                                  fields, solver.dt, bnd_conditions=solver.bnd_functions['tracer'],
+                                                                  solver_parameters=self.options.timestepper_options.solver_parameters_tracer)
             else:
-                raise NotImplementedError("Tracer equation is currently only implemented for the CrankNicolson timestepper scheme")
+                raise NotImplementedError("Tracer equation is currently only implemented for the CrankNicolson and SteadyState timestepper schemes")
 
     def _create_integrators(self):
         """
@@ -144,3 +148,8 @@ class CoupledCrankNicolson2D(CoupledTimeIntegrator2D):
 class CoupledCrankEuler2D(CoupledTimeIntegrator2D):
     swe_integrator = timeintegrator.CrankNicolson
     tracer_integrator = timeintegrator.ForwardEuler
+
+
+class CoupledSteadyState2D(CoupledTimeIntegrator2D):
+    swe_integrator = timeintegrator.SteadyState
+    tracer_integrator = timeintegrator.SteadyState

@@ -299,7 +299,7 @@ class FlowSolver2d(FrozenClass):
         self.eq_sw.bnd_functions = self.bnd_functions['shallow_water']
         if self.options.solve_tracer:
             self.fields.tracer_2d = Function(self.function_spaces.Q_2d, name='tracer_2d')
-            if self.options.timestepper_type == 'CrankNicolson':
+            if self.options.timestepper_type in ('CrankNicolson', 'SteadyState'):
                 self.eq_tracer = tracer_eq_2d.TracerEquation2D(self.function_spaces.Q_2d, bathymetry=self.fields.bathymetry_2d,
                                                                use_lax_friedrichs=self.options.use_lax_friedrichs_tracer,
                                                                sipg_parameter=self.options.sipg_parameter_tracer)
@@ -308,7 +308,7 @@ class FlowSolver2d(FrozenClass):
                 else:
                     self.tracer_limiter = None
             else:
-                raise NotImplementedError("Tracer equation is currently only implemented for the CrankNicolson timestepper scheme")
+                raise NotImplementedError("Tracer equation is currently only implemented for the CrankNicolson and SteadyState timestepper schemes")
 
         self._isfrozen = True  # disallow creating new attributes
 
