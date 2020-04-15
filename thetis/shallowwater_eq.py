@@ -319,6 +319,64 @@ def sigmoid_lin(x):
     return b
 
 
+def flux_hll_pg(uv, eta, bath, normal):
+    """
+    Computes the HLL flux
+    """
+    # depth
+    h_minus = eta('-') + bath('-')
+    h_plus = eta('+') + bath('+')
+
+    # wave speeds
+    # FIXME simplified wave speeds
+    s_minus = dot(uv('-'), normal('-')) - sqrt(g_grav * h_minus)
+    s_plus = dot(uv('+'), normal('-')) + sqrt(g_grav * h_plus)
+
+    # flux
+    f_minus = g_grav * eta('-')
+    f_plus = g_grav * eta('+')
+
+    # variable
+    # NOTE this is the normal velocity component
+    var_minus = dot(uv('-'), normal('-'))
+    var_plus = dot(uv('+'), normal('-'))
+
+    f = (s_plus * f_minus
+         - s_minus * f_plus
+         + s_minus * s_plus * (var_plus - var_minus))/(s_plus - s_minus)
+
+    return f
+
+
+def flux_hll_hu(uv, eta, bath, normal):
+    """
+    Computes the HLL flux
+    """
+    # depth
+    h_minus = eta('-') + bath('-')
+    h_plus = eta('+') + bath('+')
+
+    # wave speeds
+    # FIXME simplified wave speeds
+    s_minus = dot(uv('-'), normal('-')) - sqrt(g_grav * h_minus)
+    s_plus = dot(uv('+'), normal('-')) + sqrt(g_grav * h_plus)
+
+    # flux
+    # NOTE this is the normal component only
+    f_minus = h_minus * dot(uv('-'), normal('-'))
+    f_plus = h_plus * dot(uv('+'), normal('-'))
+
+    # variable NOTE this is the normal velocity component
+    var_minus = eta('-')
+    var_plus = eta('+')
+
+    f = (s_plus * f_minus
+         - s_minus * f_plus
+         + s_minus * s_plus * (var_plus - var_minus))/(s_plus - s_minus) * normal('-')
+
+    return f
+
+
 class ExternalPressureGradientTerm(ShallowWaterMomentumTerm):
     r"""
     External pressure gradient term, :math:`g \nabla \eta`
@@ -350,7 +408,9 @@ class ExternalPressureGradientTerm(ShallowWaterMomentumTerm):
                 head_star = avg(head) # + sqrt(avg(total_h)/g_grav)*jump(uv, self.normal)
             else:
                 head_star = avg(head)
-            f += g_grav*head_star*jump(self.u_test, self.normal)*self.dS
+            # f += g_grav*head_star*jump(self.u_test, self.normal)*self.dS
+            flux_star = flux_hll_pg(uv, eta, self.depth.bathymetry_2d, self.normal)
+            f += flux_star*jump(self.u_test, self.normal)*self.dS
             for bnd_marker in self.boundary_markers:
                 funcs = bnd_conditions.get(bnd_marker)
                 ds_bnd = ds(int(bnd_marker), degree=self.quad_degree)
@@ -455,10 +515,13 @@ class HUDivTerm(ShallowWaterContinuityTerm):
         if hu_by_parts:
             f = -inner(grad(self.eta_test), total_h*uv)*self.dx
             if self.eta_is_dg:
-                h = avg(total_h)
-                uv_rie = avg(uv) + sqrt(g_grav/h)*jump(eta, self.normal)
-                hu_star = h*uv_rie
-                f += inner(jump(self.eta_test, self.normal), hu_star)*self.dS
+                #h = avg(total_h)
+                #uv_rie = avg(uv) + sqrt(g_grav/h)*jump(eta, self.normal)
+                #hu_star = h*uv_rie
+                #f += inner(jump(self.eta_test, self.normal), hu_star)*self.dS
+                flux_star = flux_hll_hu(uv, eta, self.depth.bathymetry_2d, self.normal)
+                f += inner(jump(self.eta_test, self.normal), flux_star)*self.dS
+
             for bnd_marker in self.boundary_markers:
                 funcs = bnd_conditions.get(bnd_marker)
                 ds_bnd = ds(int(bnd_marker), degree=self.quad_degree)
