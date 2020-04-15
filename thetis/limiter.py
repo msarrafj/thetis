@@ -92,10 +92,10 @@ class VertexBasedP1DGLimiter(VertexBasedLimiter):
         """
         Update centroid values
         """
-        b = assemble(TestFunction(self.P0) * field * dx)
+        assemble(TestFunction(self.P0) * field * dx, tensor=self.centroids_rhs)
         if self.time_dependent_mesh:
             assemble(self.a_form, self.centroid_solver.A)
-        self.centroid_solver.solve(self.centroids, b)
+        self.centroid_solver.solve(self.centroids, self.centroids_rhs)
 
     def compute_bounds(self, field):
         """
