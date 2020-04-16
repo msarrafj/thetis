@@ -333,6 +333,7 @@ def flux_hll_pg(uv, eta, bath, normal):
     s_plus = dot(uv('+'), normal('-')) + sqrt(g_grav * h_plus)
 
     # flux
+    # FIXME this flux is for non-conservative form
     f_minus = g_grav * eta('-')
     f_plus = g_grav * eta('+')
 
@@ -362,17 +363,15 @@ def flux_hll_hu(uv, eta, bath, normal):
     s_plus = dot(uv('+'), normal('-')) + sqrt(g_grav * h_plus)
 
     # flux
-    # NOTE this is the normal component only
-    f_minus = h_minus * dot(uv('-'), normal('-'))
-    f_plus = h_plus * dot(uv('+'), normal('-'))
+    f_minus = h_minus * uv('-')
+    f_plus = h_plus * uv('+')
 
-    # variable NOTE this is the normal velocity component
     var_minus = eta('-')
     var_plus = eta('+')
 
     f = (s_plus * f_minus
          - s_minus * f_plus
-         + s_minus * s_plus * (var_plus - var_minus))/(s_plus - s_minus) * normal('-')
+         + s_minus * s_plus * (var_plus - var_minus) * normal('-'))/(s_plus - s_minus)
 
     return f
 
@@ -519,8 +518,8 @@ class HUDivTerm(ShallowWaterContinuityTerm):
                 #uv_rie = avg(uv) + sqrt(g_grav/h)*jump(eta, self.normal)
                 #hu_star = h*uv_rie
                 #f += inner(jump(self.eta_test, self.normal), hu_star)*self.dS
-                flux_star = flux_hll_hu(uv, eta, self.depth.bathymetry_2d, self.normal)
-                f += inner(jump(self.eta_test, self.normal), flux_star)*self.dS
+                flux_hu = flux_hll_hu(uv, eta, self.depth.bathymetry_2d, self.normal)
+                f += inner(jump(self.eta_test, self.normal), flux_hu)*self.dS
 
             for bnd_marker in self.boundary_markers:
                 funcs = bnd_conditions.get(bnd_marker)
